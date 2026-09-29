@@ -2,6 +2,7 @@
 import os
 import dotenv
 import requests
+import json
 
 
 dotenv.load_dotenv()
@@ -191,3 +192,14 @@ while offset < int(total_records):
 print(len(all_records))
 print(total_records)
 print(len(all_records) == int(total_records))
+
+
+with open("data/raw/ercot_demand_forecast_raw.json", "w") as file:
+    json.dump(all_records, file)
+
+with open("data/raw/ercot_demand_forecast_raw.json", "r") as file:
+    d = json.load(file)
+
+print(type(d))
+print(len(d))
+print(d[0])
