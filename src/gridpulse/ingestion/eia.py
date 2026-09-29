@@ -8,6 +8,12 @@ dotenv.load_dotenv()
 
 eia_key = os.getenv("EIA_API_KEY")
 
+# number of records to request at a time
+length = 5000
+
+# where in the dataset we want to start
+offset = 0
+
 
 # ----- API URLs -----
 
@@ -31,7 +37,12 @@ data_params = {
     "api_key": eia_key,
     "data[]": "value",
     "facets[respondent][]" : "ERCO",
-    "facets[type][]": ["DF", "D"]
+    "facets[type][]": ["DF", "D"],
+    "start": "2025-01-01",
+    "end": "2026-09-28",
+    "length": length,
+    "offset": offset
+
 }
 
 metadata_params = {
@@ -158,3 +169,25 @@ print(type_facets)
 print("---------------")
 print(data_info["total"])
 print(records[0])
+
+all_records = []
+
+offset = 0
+
+length = 5000
+
+total_records = data_info["total"]
+
+while offset < int(total_records):
+     data_params["offset"] = offset
+
+     data_response = requests.get(data_url, params=data_params)
+     data_response_data = data_response.json()
+     batch = data_response_data["response"]["data"]
+     all_records.extend(batch)
+     offset += length
+
+
+print(len(all_records))
+print(total_records)
+print(len(all_records) == int(total_records))
