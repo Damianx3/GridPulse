@@ -1,205 +1,105 @@
 # imports
-import os
-import dotenv
-import requests
 import json
+import os
+
+import requests
+from dotenv import load_dotenv
 
 
-dotenv.load_dotenv()
+# ----- Configuration -----
+
+load_dotenv()
 
 eia_key = os.getenv("EIA_API_KEY")
 
-# number of records to request at a time
-length = 5000
-
-# where in the dataset we want to start
-offset = 0
-
-
-# ----- API URLs -----
-
-# endpoint where we request the actual electricity data
 data_url = "https://api.eia.gov/v2/electricity/rto/region-data/data/"
 
-# endpoint that gives us information ABOUT the dataset
-metadata_url = "https://api.eia.gov/v2/electricity/rto/region-data/"
+start_date = "2025-01-01"
+end_date = "2026-09-28"
 
-# endpoint that gives us information about respondent values 
-respondent_url = "https://api.eia.gov/v2/electricity/rto/region-data/facet/respondent/"
-
-# endpoint that gives us the valid metric/type values
-type_url = "https://api.eia.gov/v2/electricity/rto/region-data/facet/type/"
+length = 5000
+offset = 0
 
 
 # ----- Request parameters -----
 
-# parameters for our actual electricity data request
 data_params = {
     "api_key": eia_key,
     "data[]": "value",
-    "facets[respondent][]" : "ERCO",
-    "facets[type][]": ["DF", "D"],
-    "start": "2025-01-01",
-    "end": "2026-09-28",
+
+    # only ERCOT
+    "facets[respondent][]": "ERCO",
+
+    # demand and day-ahead demand forecast
+    "facets[type][]": ["D", "DF"],
+
+    # project date range
+    "start": start_date,
+    "end": end_date,
+
+    # pagination
     "length": length,
-    "offset": offset
-
-}
-
-metadata_params = {
-    "api_key": eia_key,
-}
-
-respondent_params = {
-    "api_key" : eia_key,
-}
-
-type_params = {
-    "api_key": eia_key
+    "offset": offset,
 }
 
 
-# ----- Make API requests -----
+# ----- Get total number of records -----
 
-# request actual electricity data from EIA
-data_response = requests.get(data_url, params=data_params)
-
-metadata_response = requests.get(
-    metadata_url,
-    params=metadata_params
+data_response = requests.get(
+    data_url,
+    params=data_params,
 )
 
-respondent_response = requests.get(respondent_url, params=respondent_params)
+data_response.raise_for_status()
 
-type_response = requests.get(type_url, params=type_params)
+data_info = data_response.json()["response"]
 
+total_records = int(data_info["total"])
 
-# ----- Parse electricity data -----
-
-data_response_data = data_response.json()
-
-data_info = data_response_data["response"]
-
-records = data_info["data"]
+print(f"Total records available: {total_records}")
 
 
-# ----- Parse metadata -----
-
-metadata_data = metadata_response.json()
-
-metadata_info = metadata_data["response"]
-
-facets = metadata_info["facets"]
-
-# ----- respondent -----
-respondent_data = respondent_response.json()
-
-respondent_info = respondent_data["response"]
-
-respondents = respondent_info["facets"]
-
-# ----- Parse type data -----
-
-type_response_data= type_response.json()
-
-type_info = type_response_data["response"]
-
-type_facets = type_info["facets"]
-
-
-# ----- Inspect electricity data -----
-
-print("----- Inspect electricity data -----")
-
-print(bool(eia_key))
-
-print(data_response.status_code)
-
-print(type(data_response_data))
-print(data_response_data.keys())
-
-print(type(data_info))
-print(data_info.keys())
-
-print(len(records))
-
-print(data_info["total"])
-
-print(type(records[0]["value"]))
-
-
-# ----- Inspect metadata -----
-
-print("----- Inspect metadata -----")
-
-print(metadata_response.status_code)
-
-print(type(facets))
-
-print(len(facets))
-
-print(facets)
-
-# ----- Inspect respondent data -----
-
-print("----- Inspect respondent data -----")
-
-print(respondent_response.status_code)
-print(type(respondent_info))
-print(respondent_info.keys())
-
-print(type(respondents))
-print(len(respondents))
-print(respondents[0])
-
-for respondent in respondents:
-    if "Electric Reliability Council" in respondent["name"]:
-        print(respondent)
-
-print(records[0])
-
-# ----- Inspect type data -----
-
-print("----- Inspect type data -----")
-
-print(type_response.status_code)
-print(type(type_facets))
-print(len(type_facets))
-print(type_facets)
-
-print("---------------")
-print(data_info["total"])
-print(records[0])
+# ----- Download all records -----
 
 all_records = []
 
-offset = 0
+while offset < total_records:
 
-length = 5000
+    data_params["offset"] = offset
 
-total_records = data_info["total"]
+    data_response = requests.get(
+        data_url,
+        params=data_params,
+    )
 
-while offset < int(total_records):
-     data_params["offset"] = offset
+    data_response.raise_for_status()
 
-     data_response = requests.get(data_url, params=data_params)
-     data_response_data = data_response.json()
-     batch = data_response_data["response"]["data"]
-     all_records.extend(batch)
-     offset += length
+    data_info = data_response.json()["response"]
 
+    batch = data_info["data"]
 
-print(len(all_records))
-print(total_records)
-print(len(all_records) == int(total_records))
+    all_records.extend(batch)
+
+    print(f"Downloaded {len(all_records)} of {total_records} records")
+
+    offset += length
 
 
-with open("data/raw/ercot_demand_forecast_raw.json", "w") as file:
+# ----- Validate download -----
+
+if len(all_records) != total_records:
+    raise ValueError(
+        f"Expected {total_records} records, "
+        f"but downloaded {len(all_records)}."
+    )
+
+
+# ----- Save raw data -----
+
+output_path = "data/raw/ercot_demand_forecast_raw.json"
+
+with open(output_path, "w") as file:
     json.dump(all_records, file)
 
-with open("data/raw/ercot_demand_forecast_raw.json", "r") as file:
-    d = json.load(file)
 
-print(type(d))
-print(len(d))
-print(d[0])
+print(f"Raw data saved to {output_path}")
