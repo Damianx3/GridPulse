@@ -14,12 +14,11 @@ df = pd.read_csv(
 
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-# Time-series data must be chronological
 df = df.sort_values("timestamp").reset_index(drop=True)
 
 
 # =========================================================
-# 2. VALIDATE HOURLY DATA
+# 2. VERIFY HOURLY CONTINUITY
 # =========================================================
 
 time_differences = df["timestamp"].diff()
@@ -29,27 +28,56 @@ print(time_differences.value_counts().head())
 
 
 # =========================================================
-# 3. FEATURE ENGINEERING
+# 3. CALENDAR FEATURES
 # =========================================================
 
-# Calendar features
 df["hour"] = df["timestamp"].dt.hour
 df["day_of_week"] = df["timestamp"].dt.dayofweek
 df["month"] = df["timestamp"].dt.month
 
-# Historical demand features
+df["is_weekend"] = (
+    df["day_of_week"] >= 5
+).astype(int)
+
+
+# =========================================================
+# 4. HISTORICAL DEMAND FEATURES
+# =========================================================
+
 df["lag_24"] = df["demand"].shift(24)
+df["lag_48"] = df["demand"].shift(48)
+df["lag_72"] = df["demand"].shift(72)
 df["lag_168"] = df["demand"].shift(168)
 
 
-# First week cannot have lag_168
+# =========================================================
+# 5. MODELING DATASET
+# =========================================================
+
 model_df = df.dropna(
-    subset=["lag_24", "lag_168"]
+    subset=[
+        "lag_24",
+        "lag_48",
+        "lag_72",
+        "lag_168",
+    ]
 ).copy()
 
 
 # =========================================================
-# 4. CHRONOLOGICAL TRAIN / TEST SPLIT
+# 6. RESIDUAL TARGET
+# =========================================================
+
+# How much today's demand differs from
+# the same hour yesterday
+model_df["residual"] = (
+    model_df["demand"]
+    - model_df["lag_24"]
+)
+
+
+# =========================================================
+# 7. CHRONOLOGICAL TRAIN / TEST SPLIT
 # =========================================================
 
 split_index = int(len(model_df) * 0.8)
@@ -73,32 +101,32 @@ print(
 
 
 # =========================================================
-# 5. DEFINE MODEL FEATURES + TARGET
+# 8. FEATURES AND TARGET
 # =========================================================
 
 feature_columns = [
     "hour",
     "day_of_week",
     "month",
+    "is_weekend",
     "lag_24",
+    "lag_48",
+    "lag_72",
     "lag_168",
 ]
 
-# X = information the model gets to see
 X_train = train_df[feature_columns]
 X_test = test_df[feature_columns]
 
-# y = value we want the model to predict
-y_train = train_df["demand"]
-y_test = test_df["demand"]
+y_train = train_df["residual"]
 
 
 # =========================================================
-# 6. TRAIN XGBOOST MODEL
+# 9. TRAIN MODEL
 # =========================================================
 
 model = XGBRegressor(
-    n_estimators=400,
+    n_estimators=500,
     max_depth=5,
     learning_rate=0.05,
     subsample=0.8,
@@ -115,23 +143,25 @@ model.fit(
 
 
 # =========================================================
-# 7. CREATE PREDICTIONS
+# 10. PREDICT RESIDUAL
 # =========================================================
 
-test_df["gridpulse_prediction"] = model.predict(X_test)
+predicted_residual = model.predict(X_test)
 
-# Naive baseline:
-# same demand as the same hour yesterday
+# Baseline = yesterday's demand
 test_df["baseline_prediction"] = test_df["lag_24"]
 
+# GridPulse = yesterday + predicted correction
+test_df["gridpulse_prediction"] = (
+    test_df["lag_24"]
+    + predicted_residual
+)
+
 
 # =========================================================
-# 8. FAIR MODEL COMPARISON
+# 11. FAIR COMPARISON
 # =========================================================
 
-# ERCOT has some missing forecast values.
-# For the three-way comparison, evaluate only timestamps
-# where all predictions are available.
 comparison_df = test_df.dropna(
     subset=["forecast"]
 ).copy()
@@ -154,7 +184,7 @@ gridpulse_mae = mean_absolute_error(
 
 
 # =========================================================
-# 9. PRINT RESULTS
+# 12. RESULTS
 # =========================================================
 
 print("\n=================================")
@@ -169,7 +199,7 @@ print(f"\nComparison rows: {len(comparison_df)}")
 
 
 # =========================================================
-# 10. EXPORT DASHBOARD RESULTS
+# 13. EXPORT DASHBOARD DATA
 # =========================================================
 
 output_columns = [
