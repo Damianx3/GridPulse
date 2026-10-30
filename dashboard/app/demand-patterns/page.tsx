@@ -18,8 +18,18 @@ import {
   YAxis,
 } from "recharts";
 
-import { DashboardNav } from "../../components/dashboard-nav";
-import { ThemeToggle } from "../../components/theme-toggle";
+import {
+  DashboardNav,
+} from "../../components/dashboard-nav";
+
+import {
+  ThemeToggle,
+} from "../../components/theme-toggle";
+
+
+const TEXAS_TIME_ZONE =
+  "America/Chicago";
+
 
 type DemandRow = {
   timestamp: string;
@@ -27,181 +37,475 @@ type DemandRow = {
   forecast: number | null;
 };
 
-type Range = "24H" | "7D" | "30D";
 
-function parseNumber(value: string) {
-  if (value.trim() === "") {
+type Range =
+  | "24H"
+  | "7D"
+  | "30D";
+
+
+function parseNumber(
+  value: string
+) {
+
+  if (
+    value.trim() ===
+    ""
+  ) {
     return null;
   }
 
-  return Number(value);
+  return Number(
+    value
+  );
 }
 
-function parseCsv(csv: string): DemandRow[] {
+
+function parseCsv(
+  csv: string
+): DemandRow[] {
+
   const lines =
-    csv.trim().split(/\r?\n/);
+    csv
+      .trim()
+      .split(/\r?\n/);
+
 
   const headers =
-    lines[0].split(",");
+    lines[
+      0
+    ].split(",");
+
 
   return lines
     .slice(1)
-    .map((line) => {
-      const values =
-        line.split(",");
+    .map(
+      (
+        line
+      ) => {
 
-      const row =
-        Object.fromEntries(
-          headers.map(
-            (header, index) => [
-              header,
-              values[index] ?? "",
-            ]
-          )
-        );
+        const values =
+          line.split(
+            ","
+          );
 
-      return {
-        timestamp: row.timestamp,
-        demand: Number(row.demand),
-        forecast: parseNumber(
-          row.forecast
-        ),
-      };
-    });
+
+        const row =
+          Object.fromEntries(
+            headers.map(
+              (
+                header,
+                index
+              ) => [
+                header,
+                values[
+                  index
+                ] ?? "",
+              ]
+            )
+          );
+
+
+        return {
+          timestamp:
+            row.timestamp,
+
+          demand:
+            Number(
+              row.demand
+            ),
+
+          forecast:
+            parseNumber(
+              row.forecast
+            ),
+        };
+      }
+    );
 }
 
-function getDate(timestamp: string) {
-  return new Date(
-    timestamp.replace(" ", "T")
-  );
-}
 
-function average(values: number[]) {
-  if (values.length === 0) {
+function average(
+  values: number[]
+) {
+
+  if (
+    values.length ===
+    0
+  ) {
     return 0;
   }
 
+
   return (
     values.reduce(
-      (sum, value) =>
-        sum + value,
+      (
+        sum,
+        value
+      ) =>
+        sum +
+        value,
       0
-    ) / values.length
+    ) /
+    values.length
   );
 }
 
-function formatRange(
+
+function texasParts(
+  timestamp: string
+) {
+
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone:
+          TEXAS_TIME_ZONE,
+
+        year:
+          "numeric",
+
+        month:
+          "2-digit",
+
+        day:
+          "2-digit",
+
+        hour:
+          "2-digit",
+
+        weekday:
+          "short",
+
+        hourCycle:
+          "h23",
+      }
+    )
+    .formatToParts(
+      new Date(
+        timestamp
+      )
+    );
+
+
+  function get(
+    type: Intl.DateTimeFormatPartTypes
+  ) {
+
+    return (
+      parts.find(
+        (
+          part
+        ) =>
+          part.type ===
+          type
+      )?.value ??
+      ""
+    );
+  }
+
+
+  return {
+    year:
+      Number(
+        get(
+          "year"
+        )
+      ),
+
+    month:
+      Number(
+        get(
+          "month"
+        )
+      ),
+
+    day:
+      Number(
+        get(
+          "day"
+        )
+      ),
+
+    hour:
+      Number(
+        get(
+          "hour"
+        )
+      ),
+
+    weekday:
+      get(
+        "weekday"
+      ),
+  };
+}
+
+
+function formatTexasDate(
+  timestamp: string
+) {
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone:
+        TEXAS_TIME_ZONE,
+
+      weekday:
+        "short",
+
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      year:
+        "numeric",
+    }
+  ).format(
+    new Date(
+      timestamp
+    )
+  );
+}
+
+
+function formatTexasTime(
+  timestamp: string
+) {
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone:
+        TEXAS_TIME_ZONE,
+
+      hour:
+        "numeric",
+    }
+  ).format(
+    new Date(
+      timestamp
+    )
+  );
+}
+
+
+function formatTexasRange(
   rows: DemandRow[]
 ) {
-  if (rows.length === 0) {
+
+  if (
+    rows.length ===
+    0
+  ) {
     return "";
   }
+
 
   const formatter =
     new Intl.DateTimeFormat(
       "en-US",
       {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
+        timeZone:
+          TEXAS_TIME_ZONE,
+
+        month:
+          "short",
+
+        day:
+          "numeric",
+
+        year:
+          "numeric",
       }
     );
 
-  return `${formatter.format(
-    getDate(
-      rows[0].timestamp
+
+  return `${
+    formatter.format(
+      new Date(
+        rows[
+          0
+        ].timestamp
+      )
     )
-  )} – ${formatter.format(
-    getDate(
-      rows[
-        rows.length - 1
-      ].timestamp
+  } – ${
+    formatter.format(
+      new Date(
+        rows[
+          rows.length -
+          1
+        ].timestamp
+      )
     )
-  )}`;
+  }`;
 }
 
+
 export default function DemandPatterns() {
-  const [rows, setRows] =
-    useState<DemandRow[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    rows,
+    setRows,
+  ] =
+    useState<
+      DemandRow[]
+    >([]);
 
-  const [range, setRange] =
-    useState<Range>("7D");
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    range,
+    setRange,
+  ] =
+    useState<Range>(
+      "7D"
+    );
+
+
+  // ======================================================
+  // LOAD
+  // ======================================================
 
   useEffect(() => {
+
     async function loadData() {
+
       const response =
         await fetch(
           "/ercot_demand_forecast_clean.csv"
         );
 
+
       const csv =
         await response.text();
 
-      setRows(parseCsv(csv));
-      setLoading(false);
+
+      setRows(
+        parseCsv(
+          csv
+        )
+      );
+
+
+      setLoading(
+        false
+      );
     }
 
+
     loadData();
+
   }, []);
+
+
+  // ======================================================
+  // FILTER
+  // ======================================================
 
   const filteredRows =
     useMemo(() => {
+
       const hours = {
         "24H": 24,
         "7D": 168,
         "30D": 720,
       }[range];
 
-      return rows.slice(-hours);
-    }, [rows, range]);
+
+      return rows.slice(
+        -hours
+      );
+
+    }, [
+      rows,
+      range,
+    ]);
+
 
   const selectedRange =
     useMemo(
       () =>
-        formatRange(
+        formatTexasRange(
           filteredRows
         ),
-      [filteredRows]
+      [
+        filteredRows,
+      ]
     );
+
+
+  // ======================================================
+  // METRICS
+  // ======================================================
 
   const summary =
     useMemo(() => {
+
       if (
-        filteredRows.length === 0
+        filteredRows.length ===
+        0
       ) {
         return null;
       }
 
+
       const avg =
         average(
           filteredRows.map(
-            (row) =>
+            (
+              row
+            ) =>
               row.demand
           )
         );
 
+
       const peakRow =
         filteredRows.reduce(
-          (highest, row) =>
+          (
+            highest,
+            row
+          ) =>
             row.demand >
             highest.demand
               ? row
               : highest,
-          filteredRows[0]
+
+          filteredRows[
+            0
+          ]
         );
+
 
       const lowRow =
         filteredRows.reduce(
-          (lowest, row) =>
+          (
+            lowest,
+            row
+          ) =>
             row.demand <
             lowest.demand
               ? row
               : lowest,
-          filteredRows[0]
+
+          filteredRows[
+            0
+          ]
         );
+
 
       return {
         averageDemand:
@@ -216,270 +520,502 @@ export default function DemandPatterns() {
         minimumDemand:
           lowRow.demand,
 
+        minimumTimestamp:
+          lowRow.timestamp,
+
         observations:
           filteredRows.length,
       };
-    }, [filteredRows]);
+
+    }, [
+      filteredRows,
+    ]);
+
+
+  // ======================================================
+  // DEMAND BY TEXAS HOUR
+  // ======================================================
 
   const demandByHour =
     useMemo(() => {
+
       return Array.from(
-        { length: 24 },
-        (_, hour) => {
+        {
+          length:
+            24,
+        },
+
+        (
+          _,
+          hour
+        ) => {
+
           const matching =
             filteredRows.filter(
-              (row) =>
-                getDate(
+              (
+                row
+              ) =>
+                texasParts(
                   row.timestamp
-                ).getHours() ===
+                ).hour ===
                 hour
             );
 
+
+          const hourLabel =
+            new Intl.DateTimeFormat(
+              "en-US",
+              {
+                hour:
+                  "numeric",
+
+                timeZone:
+                  "UTC",
+              }
+            ).format(
+              new Date(
+                Date.UTC(
+                  2026,
+                  0,
+                  1,
+                  hour
+                )
+              )
+            );
+
+
           return {
             hour:
-              new Date(
-                2026,
-                0,
-                1,
-                hour
-              ).toLocaleTimeString(
-                "en-US",
-                {
-                  hour:
-                    "numeric",
-                }
-              ),
+              hourLabel,
 
             demand:
               matching.length >
               0
+
                 ? Math.round(
                     average(
                       matching.map(
-                        (row) =>
+                        (
+                          row
+                        ) =>
                           row.demand
                       )
                     )
                   )
+
                 : null,
           };
         }
       );
-    }, [filteredRows]);
+
+    }, [
+      filteredRows,
+    ]);
+
+
+  // ======================================================
+  // DAILY AVERAGES — TEXAS CALENDAR DAY
+  // ======================================================
 
   const demandByDay =
     useMemo(() => {
+
       const groups =
         new Map<
           string,
-          number[]
+          {
+            timestamp:
+              string;
+
+            demands:
+              number[];
+          }
         >();
 
+
       filteredRows.forEach(
-        (row) => {
-          const date =
-            getDate(
+        (
+          row
+        ) => {
+
+          const parts =
+            texasParts(
               row.timestamp
             );
 
+
           const key =
-            `${date.getFullYear()}-${String(
-              date.getMonth() +
-                1
-            ).padStart(
-              2,
-              "0"
-            )}-${String(
-              date.getDate()
-            ).padStart(
-              2,
-              "0"
-            )}`;
+            `${
+              parts.year
+            }-${
+              String(
+                parts.month
+              ).padStart(
+                2,
+                "0"
+              )
+            }-${
+              String(
+                parts.day
+              ).padStart(
+                2,
+                "0"
+              )
+            }`;
+
 
           const existing =
-            groups.get(key) ??
-            [];
-
-          existing.push(
-            row.demand
-          );
-
-          groups.set(
-            key,
-            existing
-          );
-        }
-      );
-
-      return Array.from(
-        groups.entries()
-      ).map(
-        ([date, demands]) => {
-          const parsed =
-            new Date(
-              `${date}T12:00:00`
+            groups.get(
+              key
             );
 
-          return {
-            label:
-              parsed.toLocaleDateString(
-                "en-US",
-                {
-                  weekday:
-                    "short",
-                  month:
-                    "short",
-                  day:
-                    "numeric",
-                }
-              ),
 
-            demand:
-              Math.round(
-                average(
-                  demands
-                )
-              ),
-          };
+          if (
+            existing
+          ) {
+
+            existing.demands.push(
+              row.demand
+            );
+
+          } else {
+
+            groups.set(
+              key,
+              {
+                timestamp:
+                  row.timestamp,
+
+                demands: [
+                  row.demand,
+                ],
+              }
+            );
+          }
         }
       );
-    }, [filteredRows]);
+
+
+      return Array.from(
+        groups.values()
+      ).map(
+        (
+          group
+        ) => ({
+          label:
+            new Intl.DateTimeFormat(
+              "en-US",
+              {
+                timeZone:
+                  TEXAS_TIME_ZONE,
+
+                weekday:
+                  "short",
+
+                month:
+                  "short",
+
+                day:
+                  "numeric",
+              }
+            ).format(
+              new Date(
+                group.timestamp
+              )
+            ),
+
+          demand:
+            Math.round(
+              average(
+                group.demands
+              )
+            ),
+        })
+      );
+
+    }, [
+      filteredRows,
+    ]);
+
+
+  // ======================================================
+  // MONTHLY AVERAGES — TEXAS CALENDAR MONTH
+  // ======================================================
 
   const demandByMonth =
     useMemo(() => {
+
       const groups =
         new Map<
           string,
-          number[]
+          {
+            timestamp:
+              string;
+
+            demands:
+              number[];
+          }
         >();
 
+
       filteredRows.forEach(
-        (row) => {
-          const date =
-            getDate(
+        (
+          row
+        ) => {
+
+          const parts =
+            texasParts(
               row.timestamp
             );
 
+
           const key =
-            `${date.getFullYear()}-${String(
-              date.getMonth() +
-                1
-            ).padStart(
-              2,
-              "0"
-            )}`;
+            `${
+              parts.year
+            }-${
+              String(
+                parts.month
+              ).padStart(
+                2,
+                "0"
+              )
+            }`;
+
 
           const existing =
-            groups.get(key) ??
-            [];
-
-          existing.push(
-            row.demand
-          );
-
-          groups.set(
-            key,
-            existing
-          );
-        }
-      );
-
-      return Array.from(
-        groups.entries()
-      ).map(
-        ([key, demands]) => {
-          const [
-            year,
-            month,
-          ] = key.split("-");
-
-          const date =
-            new Date(
-              Number(year),
-              Number(month) - 1,
-              1
+            groups.get(
+              key
             );
 
-          return {
-            label:
-              date.toLocaleDateString(
-                "en-US",
-                {
-                  month:
-                    "short",
-                  year:
-                    "numeric",
-                }
-              ),
 
-            demand:
-              Math.round(
-                average(
-                  demands
-                )
-              ),
-          };
+          if (
+            existing
+          ) {
+
+            existing.demands.push(
+              row.demand
+            );
+
+          } else {
+
+            groups.set(
+              key,
+              {
+                timestamp:
+                  row.timestamp,
+
+                demands: [
+                  row.demand,
+                ],
+              }
+            );
+          }
         }
       );
-    }, [filteredRows]);
+
+
+      return Array.from(
+        groups.values()
+      ).map(
+        (
+          group
+        ) => ({
+          label:
+            new Intl.DateTimeFormat(
+              "en-US",
+              {
+                timeZone:
+                  TEXAS_TIME_ZONE,
+
+                month:
+                  "short",
+
+                year:
+                  "numeric",
+              }
+            ).format(
+              new Date(
+                group.timestamp
+              )
+            ),
+
+          demand:
+            Math.round(
+              average(
+                group.demands
+              )
+            ),
+        })
+      );
+
+    }, [
+      filteredRows,
+    ]);
+
+
+  // ======================================================
+  // TOP PEAK HOURS
+  // ======================================================
 
   const peakHours =
     useMemo(() => {
+
       return [
         ...filteredRows,
       ]
         .sort(
-          (a, b) =>
+          (
+            a,
+            b
+          ) =>
             b.demand -
             a.demand
         )
-        .slice(0, 10);
-    }, [filteredRows]);
+        .slice(
+          0,
+          10
+        );
 
-  if (loading) {
+    }, [
+      filteredRows,
+    ]);
+
+
+  if (
+    loading
+  ) {
+
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-neutral-500">
-          Loading demand patterns...
+      <main
+        className="
+          flex
+          min-h-screen
+          items-center
+          justify-center
+        "
+      >
+        <p
+          className="
+            text-sm
+            text-neutral-500
+          "
+        >
+          Loading demand
+          patterns...
         </p>
       </main>
     );
   }
 
+
   return (
-    <main className="min-h-screen">
+    <main
+      className="
+        min-h-screen
+      "
+    >
 
-      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
+      <div
+        className="
+          mx-auto
+          max-w-7xl
+          px-5
+          py-8
 
-        <header className="mb-6 flex items-start justify-between gap-6">
+          sm:px-8
+        "
+      >
+
+        {/* HEADER */}
+
+        <header
+          className="
+            mb-6
+            flex
+            items-start
+            justify-between
+            gap-6
+          "
+        >
 
           <div>
 
-            <p className="text-sm text-neutral-500">
+            <p
+              className="
+                text-sm
+                text-neutral-500
+              "
+            >
               GridPulse
             </p>
 
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+
+            <h1
+              className="
+                mt-1
+                text-3xl
+                font-semibold
+                tracking-tight
+              "
+            >
               Demand Patterns
             </h1>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-500">
-              Explore how Texas electricity
-              demand changes throughout the
-              day and across recent dates.
+
+            <p
+              className="
+                mt-3
+                max-w-2xl
+                text-sm
+                leading-6
+                text-neutral-500
+              "
+            >
+              Explore how Texas
+              electricity demand
+              changes throughout
+              the day and across
+              recent dates.
             </p>
 
           </div>
+
 
           <ThemeToggle />
 
         </header>
 
+
         <DashboardNav />
 
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-          <div className="flex w-fit rounded-lg border border-neutral-200 p-1 dark:border-neutral-800">
+        {/* RANGE */}
+
+        <div
+          className="
+            mb-5
+            flex
+            flex-col
+            gap-3
+
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
+          "
+        >
+
+          <div
+            className="
+              flex
+              w-fit
+              rounded-lg
+              border
+              border-neutral-200
+              p-1
+
+              dark:border-neutral-800
+            "
+          >
 
             {(
               [
@@ -487,98 +1023,167 @@ export default function DemandPatterns() {
                 "7D",
                 "30D",
               ] as Range[]
-            ).map((option) => (
+            ).map(
+              (
+                option
+              ) => (
 
-              <button
-                key={option}
-                onClick={() =>
-                  setRange(option)
-                }
-                className={`
-                  rounded-md
-                  px-3
-                  py-1.5
-                  text-xs
-                  font-medium
-                  transition-colors
-
-                  ${
-                    range === option
-                      ? `
-                        bg-neutral-900
-                        text-white
-                        dark:bg-neutral-100
-                        dark:text-neutral-900
-                      `
-                      : `
-                        text-neutral-500
-                        hover:text-neutral-900
-                        dark:text-neutral-400
-                        dark:hover:text-neutral-100
-                      `
+                <button
+                  key={
+                    option
                   }
-                `}
-              >
-                {option}
-              </button>
 
-            ))}
+                  onClick={() =>
+                    setRange(
+                      option
+                    )
+                  }
+
+                  className={`
+                    rounded-md
+                    px-3
+                    py-1.5
+                    text-xs
+                    font-medium
+                    transition-colors
+
+                    ${
+                      range ===
+                      option
+
+                        ? `
+                          bg-neutral-900
+                          text-white
+
+                          dark:bg-neutral-100
+                          dark:text-neutral-900
+                        `
+
+                        : `
+                          text-neutral-500
+                          hover:text-neutral-900
+
+                          dark:text-neutral-400
+                          dark:hover:text-neutral-100
+                        `
+                    }
+                  `}
+                >
+                  {option}
+                </button>
+
+              )
+            )}
 
           </div>
 
-          <p className="text-xs text-neutral-400">
-            Showing {selectedRange}
+
+          <p
+            className="
+              text-xs
+              text-neutral-400
+            "
+          >
+            Texas time ·{" "}
+            {selectedRange}
           </p>
 
         </div>
 
+
+        {/* METRICS */}
+
         {summary && (
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+          <section
+            className="
+              grid
+              gap-3
+              sm:grid-cols-2
+              lg:grid-cols-4
+            "
+          >
 
             <MetricCard
               label="Average Demand"
-              value={Math.round(
-                summary.averageDemand
-              ).toLocaleString()}
-              description={selectedRange}
+
+              value={
+                Math.round(
+                  summary.averageDemand
+                ).toLocaleString()
+              }
+
+              description={
+                selectedRange
+              }
             />
+
 
             <MetricCard
               label="Peak Demand"
-              value={summary.peakDemand.toLocaleString()}
-              description={getDate(
-                summary.peakTimestamp
-              ).toLocaleString(
-                "en-US",
-                {
-                  month:
-                    "short",
-                  day:
-                    "numeric",
-                  hour:
-                    "numeric",
-                }
-              )}
+
+              value={
+                summary.peakDemand.toLocaleString()
+              }
+
+              description={
+                `${
+                  formatTexasDate(
+                    summary.peakTimestamp
+                  )
+                } · ${
+                  formatTexasTime(
+                    summary.peakTimestamp
+                  )
+                }`
+              }
             />
+
 
             <MetricCard
               label="Lowest Demand"
-              value={summary.minimumDemand.toLocaleString()}
-              description={selectedRange}
+
+              value={
+                summary.minimumDemand.toLocaleString()
+              }
+
+              description={
+                `${
+                  formatTexasDate(
+                    summary.minimumTimestamp
+                  )
+                } · ${
+                  formatTexasTime(
+                    summary.minimumTimestamp
+                  )
+                }`
+              }
             />
+
 
             <MetricCard
               label="Observations"
-              value={summary.observations.toLocaleString()}
+
+              value={
+                summary.observations.toLocaleString()
+              }
+
               description="Hourly records"
             />
 
           </section>
+
         )}
+
+
+        {/* HOURLY */}
 
         <ChartCard
           title="Average Demand by Hour"
-          description={`Hourly profile · ${selectedRange}`}
+
+          description={
+            `Texas local hour · ${selectedRange}`
+          }
         >
 
           <ResponsiveContainer
@@ -587,39 +1192,72 @@ export default function DemandPatterns() {
           >
 
             <LineChart
-              data={demandByHour}
+              data={
+                demandByHour
+              }
             >
 
               <CartesianGrid
                 stroke="var(--border)"
-                vertical={false}
+                vertical={
+                  false
+                }
               />
+
 
               <XAxis
                 dataKey="hour"
-                minTickGap={20}
-                axisLine={false}
-                tickLine={false}
+
+                minTickGap={
+                  20
+                }
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
+
                 tick={{
                   fill:
                     "var(--muted)",
-                  fontSize: 11,
+
+                  fontSize:
+                    11,
                 }}
               />
 
+
               <YAxis
-                width={60}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(value) =>
+                width={
+                  60
+                }
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
+
+                tickFormatter={(
+                  value
+                ) =>
                   `${Math.round(
-                    value / 1000
+                    value /
+                      1000
                   )}k`
                 }
               />
 
+
               <Tooltip
-                formatter={(value) => [
+                formatter={(
+                  value
+                ) => [
                   Number(
                     value
                   ).toLocaleString(),
@@ -628,12 +1266,22 @@ export default function DemandPatterns() {
                 ]}
               />
 
+
               <Line
                 type="monotone"
+
                 dataKey="demand"
+
                 stroke="var(--chart-actual)"
-                strokeWidth={2}
-                dot={false}
+
+                strokeWidth={
+                  2
+                }
+
+                dot={
+                  false
+                }
+
                 connectNulls
               />
 
@@ -643,9 +1291,15 @@ export default function DemandPatterns() {
 
         </ChartCard>
 
+
+        {/* DAILY */}
+
         <ChartCard
           title="Daily Average Demand"
-          description={`Each bar represents one calendar day · ${selectedRange}`}
+
+          description={
+            `Each bar is a Texas calendar day · ${selectedRange}`
+          }
         >
 
           <ResponsiveContainer
@@ -654,37 +1308,69 @@ export default function DemandPatterns() {
           >
 
             <BarChart
-              data={demandByDay}
+              data={
+                demandByDay
+              }
             >
 
               <CartesianGrid
                 stroke="var(--border)"
-                vertical={false}
+                vertical={
+                  false
+                }
               />
+
 
               <XAxis
                 dataKey="label"
-                minTickGap={15}
-                axisLine={false}
-                tickLine={false}
+
+                minTickGap={
+                  15
+                }
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
+
                 tick={{
-                  fontSize: 11,
+                  fontSize:
+                    11,
                 }}
               />
 
+
               <YAxis
-                width={60}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(value) =>
+                width={
+                  60
+                }
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
+
+                tickFormatter={(
+                  value
+                ) =>
                   `${Math.round(
-                    value / 1000
+                    value /
+                      1000
                   )}k`
                 }
               />
 
+
               <Tooltip
-                formatter={(value) => [
+                formatter={(
+                  value
+                ) => [
                   Number(
                     value
                   ).toLocaleString(),
@@ -693,9 +1379,12 @@ export default function DemandPatterns() {
                 ]}
               />
 
+
               <Bar
                 dataKey="demand"
+
                 fill="var(--chart-actual)"
+
                 radius={[
                   4,
                   4,
@@ -710,9 +1399,15 @@ export default function DemandPatterns() {
 
         </ChartCard>
 
+
+        {/* MONTH */}
+
         <ChartCard
           title="Average Demand by Month"
-          description={`Monthly average with year · ${selectedRange}`}
+
+          description={
+            `Texas calendar month and year · ${selectedRange}`
+          }
         >
 
           <ResponsiveContainer
@@ -721,33 +1416,60 @@ export default function DemandPatterns() {
           >
 
             <BarChart
-              data={demandByMonth}
+              data={
+                demandByMonth
+              }
             >
 
               <CartesianGrid
                 stroke="var(--border)"
-                vertical={false}
+                vertical={
+                  false
+                }
               />
+
 
               <XAxis
                 dataKey="label"
-                axisLine={false}
-                tickLine={false}
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
               />
 
+
               <YAxis
-                width={60}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(value) =>
+                width={
+                  60
+                }
+
+                axisLine={
+                  false
+                }
+
+                tickLine={
+                  false
+                }
+
+                tickFormatter={(
+                  value
+                ) =>
                   `${Math.round(
-                    value / 1000
+                    value /
+                      1000
                   )}k`
                 }
               />
 
+
               <Tooltip
-                formatter={(value) => [
+                formatter={(
+                  value
+                ) => [
                   Number(
                     value
                   ).toLocaleString(),
@@ -756,9 +1478,12 @@ export default function DemandPatterns() {
                 ]}
               />
 
+
               <Bar
                 dataKey="demand"
+
                 fill="var(--chart-actual)"
+
                 radius={[
                   4,
                   4,
@@ -773,38 +1498,109 @@ export default function DemandPatterns() {
 
         </ChartCard>
 
-        <section className="mt-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
 
-          <h2 className="text-base font-medium">
-            Highest Demand Hours
+        {/* PEAK TABLE */}
+
+        <section
+          className="
+            mt-4
+            rounded-xl
+            border
+            border-neutral-200
+            bg-white
+            p-5
+
+            dark:border-neutral-800
+            dark:bg-neutral-950
+          "
+        >
+
+          <h2
+            className="
+              text-base
+              font-medium
+            "
+          >
+            Highest Demand
+            Hours
           </h2>
 
-          <p className="mt-1 text-xs text-neutral-500">
-            Top hourly observations within{" "}
-            {selectedRange}
+
+          <p
+            className="
+              mt-1
+              text-xs
+              text-neutral-500
+            "
+          >
+            Top hourly
+            observations within{" "}
+            {selectedRange} ·
+            Texas local time
           </p>
 
-          <div className="mt-5 overflow-x-auto">
 
-            <table className="w-full text-left text-sm">
+          <div
+            className="
+              mt-5
+              overflow-x-auto
+            "
+          >
 
-              <thead className="text-xs text-neutral-400">
+            <table
+              className="
+                w-full
+                text-left
+                text-sm
+              "
+            >
+
+              <thead
+                className="
+                  text-xs
+                  text-neutral-400
+                "
+              >
 
                 <tr>
 
-                  <th className="pb-3 font-medium">
+                  <th
+                    className="
+                      pb-3
+                      font-medium
+                    "
+                  >
                     Rank
                   </th>
 
-                  <th className="pb-3 font-medium">
+
+                  <th
+                    className="
+                      pb-3
+                      font-medium
+                    "
+                  >
                     Date
                   </th>
 
-                  <th className="pb-3 font-medium">
-                    Time
+
+                  <th
+                    className="
+                      pb-3
+                      font-medium
+                    "
+                  >
+                    Texas Time
                   </th>
 
-                  <th className="pb-3 text-right font-medium">
+
+                  <th
+                    className="
+                      pb-3
+                      text-right
+                      font-medium
+                    "
+                  >
                     Demand
                   </th>
 
@@ -812,63 +1608,81 @@ export default function DemandPatterns() {
 
               </thead>
 
+
               <tbody>
 
                 {peakHours.map(
                   (
                     row,
                     index
-                  ) => {
-                    const date =
-                      getDate(
+                  ) => (
+
+                    <tr
+                      key={
                         row.timestamp
-                      );
+                      }
 
-                    return (
-                      <tr
-                        key={
-                          row.timestamp
-                        }
-                        className="border-t border-neutral-100 dark:border-neutral-900"
+                      className="
+                        border-t
+                        border-neutral-100
+
+                        dark:border-neutral-900
+                      "
+                    >
+
+                      <td
+                        className="
+                          py-3
+                          text-neutral-400
+                        "
                       >
+                        {index +
+                          1}
+                      </td>
 
-                        <td className="py-3 text-neutral-400">
-                          {index + 1}
-                        </td>
 
-                        <td className="py-3">
-                          {date.toLocaleDateString(
-                            "en-US",
-                            {
-                              weekday:
-                                "short",
-                              month:
-                                "short",
-                              day:
-                                "numeric",
-                              year:
-                                "numeric",
-                            }
-                          )}
-                        </td>
+                      <td
+                        className="
+                          py-3
+                        "
+                      >
+                        {
+                          formatTexasDate(
+                            row.timestamp
+                          )
+                        }
+                      </td>
 
-                        <td className="py-3 text-neutral-500">
-                          {date.toLocaleTimeString(
-                            "en-US",
-                            {
-                              hour:
-                                "numeric",
-                            }
-                          )}
-                        </td>
 
-                        <td className="py-3 text-right font-medium">
-                          {row.demand.toLocaleString()}
-                        </td>
+                      <td
+                        className="
+                          py-3
+                          text-neutral-500
+                        "
+                      >
+                        {
+                          formatTexasTime(
+                            row.timestamp
+                          )
+                        }
+                      </td>
 
-                      </tr>
-                    );
-                  }
+
+                      <td
+                        className="
+                          py-3
+                          text-right
+                          font-medium
+                        "
+                      >
+                        {
+                          row.demand.toLocaleString()
+                        }
+                      </td>
+
+                    </tr>
+
+                  )
                 )}
 
               </tbody>
@@ -880,9 +1694,11 @@ export default function DemandPatterns() {
         </section>
 
       </div>
+
     </main>
   );
 }
+
 
 function MetricCard({
   label,
@@ -893,24 +1709,57 @@ function MetricCard({
   value: string;
   description: string;
 }) {
-  return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
 
-      <p className="text-xs text-neutral-500">
+  return (
+    <div
+      className="
+        rounded-xl
+        border
+        border-neutral-200
+        bg-white
+        p-5
+
+        dark:border-neutral-800
+        dark:bg-neutral-950
+      "
+    >
+
+      <p
+        className="
+          text-xs
+          text-neutral-500
+        "
+      >
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-semibold tracking-tight">
+
+      <p
+        className="
+          mt-2
+          text-2xl
+          font-semibold
+          tracking-tight
+        "
+      >
         {value}
       </p>
 
-      <p className="mt-1 text-xs text-neutral-400">
+
+      <p
+        className="
+          mt-1
+          text-xs
+          text-neutral-400
+        "
+      >
         {description}
       </p>
 
     </div>
   );
 }
+
 
 function ChartCard({
   title,
@@ -919,20 +1768,53 @@ function ChartCard({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children:
+    React.ReactNode;
 }) {
-  return (
-    <section className="mt-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
 
-      <h2 className="text-base font-medium">
+  return (
+    <section
+      className="
+        mt-4
+        rounded-xl
+        border
+        border-neutral-200
+        bg-white
+        p-5
+
+        dark:border-neutral-800
+        dark:bg-neutral-950
+      "
+    >
+
+      <h2
+        className="
+          text-base
+          font-medium
+        "
+      >
         {title}
       </h2>
 
-      <p className="mt-1 text-xs text-neutral-500">
+
+      <p
+        className="
+          mt-1
+          text-xs
+          text-neutral-500
+        "
+      >
         {description}
       </p>
 
-      <div className="mt-6 h-[320px] w-full">
+
+      <div
+        className="
+          mt-6
+          h-[320px]
+          w-full
+        "
+      >
         {children}
       </div>
 
