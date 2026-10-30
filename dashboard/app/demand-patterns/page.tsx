@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -39,10 +41,14 @@ type DemandRow = {
 };
 
 
-type Range =
-  | "24H"
+type DailyRange =
   | "7D"
   | "30D";
+
+
+type MonthlyRange =
+  | "6M"
+  | "12M";
 
 
 function parseNumber(
@@ -66,17 +72,14 @@ function parseCsv(
       .trim()
       .split(/\r?\n/);
 
-
   const headers =
     lines[0].split(",");
-
 
   return lines
     .slice(1)
     .map((line) => {
       const values =
         line.split(",");
-
 
       const row =
         Object.fromEntries(
@@ -90,7 +93,6 @@ function parseCsv(
             ]
           )
         );
-
 
       return {
         timestamp:
@@ -119,7 +121,6 @@ function average(
     return 0;
   }
 
-
   return (
     values.reduce(
       (
@@ -130,6 +131,60 @@ function average(
       0
     ) /
     values.length
+  );
+}
+
+
+function getDailyRows(
+  rows: DemandRow[],
+  range: DailyRange
+) {
+  const hours = {
+    "7D": 168,
+    "30D": 720,
+  }[range];
+
+  return rows.slice(
+    -hours
+  );
+}
+
+
+function getMonthlyRows(
+  rows: DemandRow[],
+  range: MonthlyRange
+) {
+  if (
+    rows.length === 0
+  ) {
+    return [];
+  }
+
+  const latest =
+    new Date(
+      rows[
+        rows.length - 1
+      ].timestamp
+    );
+
+  const months =
+    range === "6M"
+      ? 6
+      : 12;
+
+  const cutoff =
+    new Date(latest);
+
+  cutoff.setUTCMonth(
+    cutoff.getUTCMonth() -
+      months
+  );
+
+  return rows.filter(
+    (row) =>
+      new Date(
+        row.timestamp
+      ) >= cutoff
   );
 }
 
@@ -156,9 +211,6 @@ function texasParts(
         hour:
           "2-digit",
 
-        weekday:
-          "short",
-
         hourCycle:
           "h23",
       }
@@ -168,7 +220,8 @@ function texasParts(
 
 
   function get(
-    type: Intl.DateTimeFormatPartTypes
+    type:
+      Intl.DateTimeFormatPartTypes
   ) {
     return (
       parts.find(
@@ -199,9 +252,6 @@ function texasParts(
       Number(
         get("hour")
       ),
-
-    weekday:
-      get("weekday"),
   };
 }
 
@@ -251,6 +301,30 @@ function formatTexasTime(
 }
 
 
+function formatTexasShort(
+  timestamp: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone:
+        TEXAS_TIME_ZONE,
+
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+    }
+  ).format(
+    new Date(timestamp)
+  );
+}
+
+
 function formatTexasRange(
   rows: DemandRow[]
 ) {
@@ -259,7 +333,6 @@ function formatTexasRange(
   ) {
     return "";
   }
-
 
   const formatter =
     new Intl.DateTimeFormat(
@@ -279,26 +352,21 @@ function formatTexasRange(
       }
     );
 
-
-  const start =
+  return `${
     formatter.format(
       new Date(
         rows[0].timestamp
       )
-    );
-
-
-  const end =
+    )
+  } – ${
     formatter.format(
       new Date(
         rows[
           rows.length - 1
         ].timestamp
       )
-    );
-
-
-  return `${start} – ${end}`;
+    )
+  }`;
 }
 
 
@@ -320,11 +388,20 @@ export default function DemandPatterns() {
 
 
   const [
-    range,
-    setRange,
+    dailyRange,
+    setDailyRange,
   ] =
-    useState<Range>(
+    useState<DailyRange>(
       "7D"
+    );
+
+
+  const [
+    monthlyRange,
+    setMonthlyRange,
+  ] =
+    useState<MonthlyRange>(
+      "12M"
     );
 
 
@@ -339,83 +416,51 @@ export default function DemandPatterns() {
           "/ercot_demand_forecast_clean.csv"
         );
 
-
       const csv =
         await response.text();
-
 
       setRows(
         parseCsv(csv)
       );
 
-
       setLoading(false);
     }
-
 
     loadData();
   }, []);
 
 
   // ======================================================
-  // FILTER RANGE
+  // SUMMARY — 30 DAYS
   // ======================================================
 
-  const filteredRows =
-    useMemo(() => {
-      const hours = {
-        "24H": 24,
-        "7D": 168,
-        "30D": 720,
-      }[range];
-
-
-      return rows.slice(
-        -hours
-      );
-    }, [
-      rows,
-      range,
-    ]);
-
-
-  const selectedRange =
+  const summaryRows =
     useMemo(
       () =>
-        formatTexasRange(
-          filteredRows
-        ),
-      [
-        filteredRows,
-      ]
+        rows.slice(-720),
+      [rows]
     );
 
-
-  // ======================================================
-  // SUMMARY
-  // ======================================================
 
   const summary =
     useMemo(() => {
       if (
-        filteredRows.length ===
-        0
+        summaryRows.length === 0
       ) {
         return null;
       }
 
-
       const avg =
         average(
-          filteredRows.map(
+          summaryRows.map(
             (row) =>
               row.demand
           )
         );
 
 
-      const peakRow =
-        filteredRows.reduce(
+      const peak =
+        summaryRows.reduce(
           (
             highest,
             row
@@ -424,13 +469,12 @@ export default function DemandPatterns() {
             highest.demand
               ? row
               : highest,
-
-          filteredRows[0]
+          summaryRows[0]
         );
 
 
-      const lowRow =
-        filteredRows.reduce(
+      const low =
+        summaryRows.reduce(
           (
             lowest,
             row
@@ -439,8 +483,7 @@ export default function DemandPatterns() {
             lowest.demand
               ? row
               : lowest,
-
-          filteredRows[0]
+          summaryRows[0]
         );
 
 
@@ -449,112 +492,88 @@ export default function DemandPatterns() {
           avg,
 
         peakDemand:
-          peakRow.demand,
+          peak.demand,
 
         peakTimestamp:
-          peakRow.timestamp,
+          peak.timestamp,
 
         minimumDemand:
-          lowRow.demand,
+          low.demand,
 
         minimumTimestamp:
-          lowRow.timestamp,
+          low.timestamp,
 
         observations:
-          filteredRows.length,
+          summaryRows.length,
       };
     }, [
-      filteredRows,
+      summaryRows,
     ]);
 
 
   // ======================================================
-  // AVERAGE DEMAND BY TEXAS HOUR
+  // LAST 24 HOURS
   // ======================================================
 
-  const demandByHour =
-    useMemo(() => {
-      return Array.from(
-        {
-          length: 24,
-        },
-
-        (
-          _,
-          hour
-        ) => {
-          const matching =
-            filteredRows.filter(
-              (row) =>
-                texasParts(
-                  row.timestamp
-                ).hour === hour
-            );
+  const last24Rows =
+    useMemo(
+      () =>
+        rows.slice(-24),
+      [rows]
+    );
 
 
-          const hourLabel =
-            new Intl.DateTimeFormat(
-              "en-US",
-              {
-                hour:
-                  "numeric",
-
-                timeZone:
-                  "UTC",
-              }
-            ).format(
-              new Date(
-                Date.UTC(
-                  2026,
-                  0,
-                  1,
-                  hour
-                )
-              )
-            );
-
-
-          return {
-            hour:
-              hourLabel,
+  const last24Data =
+    useMemo(
+      () =>
+        last24Rows.map(
+          (row) => ({
+            label:
+              formatTexasShort(
+                row.timestamp
+              ),
 
             demand:
-              matching.length >
-              0
-                ? Math.round(
-                    average(
-                      matching.map(
-                        (row) =>
-                          row.demand
-                      )
-                    )
-                  )
-                : null,
-          };
-        }
-      );
-    }, [
-      filteredRows,
-    ]);
+              row.demand,
+          })
+        ),
+      [
+        last24Rows,
+      ]
+    );
 
 
   // ======================================================
-  // DAILY AVERAGES
+  // DAILY
   // ======================================================
 
-  const demandByDay =
+  const dailyRows =
+    useMemo(
+      () =>
+        getDailyRows(
+          rows,
+          dailyRange
+        ),
+      [
+        rows,
+        dailyRange,
+      ]
+    );
+
+
+  const dailyData =
     useMemo(() => {
       const groups =
         new Map<
           string,
           {
             timestamp: string;
-            demands: number[];
+            values: number[];
           }
         >();
 
 
-      filteredRows.forEach(
+      dailyRows.forEach(
         (row) => {
           const parts =
             texasParts(
@@ -584,10 +603,8 @@ export default function DemandPatterns() {
             groups.get(key);
 
 
-          if (
-            existing
-          ) {
-            existing.demands.push(
+          if (existing) {
+            existing.values.push(
               row.demand
             );
           } else {
@@ -597,7 +614,7 @@ export default function DemandPatterns() {
                 timestamp:
                   row.timestamp,
 
-                demands: [
+                values: [
                   row.demand,
                 ],
               }
@@ -618,9 +635,6 @@ export default function DemandPatterns() {
                 timeZone:
                   TEXAS_TIME_ZONE,
 
-                weekday:
-                  "short",
-
                 month:
                   "short",
 
@@ -636,33 +650,47 @@ export default function DemandPatterns() {
           demand:
             Math.round(
               average(
-                group.demands
+                group.values
               )
             ),
         })
       );
     }, [
-      filteredRows,
+      dailyRows,
     ]);
 
 
   // ======================================================
-  // MONTHLY AVERAGES
+  // MONTHLY
   // ======================================================
 
-  const demandByMonth =
+  const monthlyRows =
+    useMemo(
+      () =>
+        getMonthlyRows(
+          rows,
+          monthlyRange
+        ),
+      [
+        rows,
+        monthlyRange,
+      ]
+    );
+
+
+  const monthlyData =
     useMemo(() => {
       const groups =
         new Map<
           string,
           {
             timestamp: string;
-            demands: number[];
+            values: number[];
           }
         >();
 
 
-      filteredRows.forEach(
+      monthlyRows.forEach(
         (row) => {
           const parts =
             texasParts(
@@ -685,10 +713,8 @@ export default function DemandPatterns() {
             groups.get(key);
 
 
-          if (
-            existing
-          ) {
-            existing.demands.push(
+          if (existing) {
+            existing.values.push(
               row.demand
             );
           } else {
@@ -698,7 +724,7 @@ export default function DemandPatterns() {
                 timestamp:
                   row.timestamp,
 
-                demands: [
+                values: [
                   row.demand,
                 ],
               }
@@ -709,38 +735,51 @@ export default function DemandPatterns() {
 
 
       return Array.from(
-        groups.values()
-      ).map(
-        (group) => ({
-          label:
-            new Intl.DateTimeFormat(
-              "en-US",
-              {
-                timeZone:
-                  TEXAS_TIME_ZONE,
+        groups.entries()
+      )
+        .sort(
+          (
+            [a],
+            [b]
+          ) =>
+            a.localeCompare(b)
+        )
+        .map(
+          (
+            [
+              ,
+              group,
+            ]
+          ) => ({
+            label:
+              new Intl.DateTimeFormat(
+                "en-US",
+                {
+                  timeZone:
+                    TEXAS_TIME_ZONE,
 
-                month:
-                  "short",
+                  month:
+                    "short",
 
-                year:
-                  "numeric",
-              }
-            ).format(
-              new Date(
-                group.timestamp
-              )
-            ),
+                  year:
+                    "2-digit",
+                }
+              ).format(
+                new Date(
+                  group.timestamp
+                )
+              ),
 
-          demand:
-            Math.round(
-              average(
-                group.demands
-              )
-            ),
-        })
-      );
+            demand:
+              Math.round(
+                average(
+                  group.values
+                )
+              ),
+          })
+        );
     }, [
-      filteredRows,
+      monthlyRows,
     ]);
 
 
@@ -749,30 +788,30 @@ export default function DemandPatterns() {
   // ======================================================
 
   const peakHours =
-    useMemo(() => {
-      return [
-        ...filteredRows,
+    useMemo(
+      () =>
+        [
+          ...summaryRows,
+        ]
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              b.demand -
+              a.demand
+          )
+          .slice(
+            0,
+            10
+          ),
+      [
+        summaryRows,
       ]
-        .sort(
-          (
-            a,
-            b
-          ) =>
-            b.demand -
-            a.demand
-        )
-        .slice(
-          0,
-          10
-        );
-    }, [
-      filteredRows,
-    ]);
+    );
 
 
-  if (
-    loading
-  ) {
+  if (loading) {
     return (
       <main
         className="
@@ -788,8 +827,7 @@ export default function DemandPatterns() {
             text-neutral-500
           "
         >
-          Loading demand
-          patterns...
+          Loading demand patterns...
         </p>
       </main>
     );
@@ -861,9 +899,7 @@ export default function DemandPatterns() {
             >
               Explore how Texas
               electricity demand
-              changes throughout
-              the day and across
-              recent dates.
+              changes over time.
             </p>
 
           </div>
@@ -877,199 +913,114 @@ export default function DemandPatterns() {
         <DashboardNav />
 
 
-        {/* RANGE FILTER */}
-
-        <div
-          className="
-            mb-5
-            flex
-            flex-col
-            gap-3
-
-            sm:flex-row
-            sm:items-center
-            sm:justify-between
-          "
-        >
-
-          <div
-            className="
-              flex
-              w-fit
-              rounded-lg
-              border
-              border-neutral-200
-              p-1
-
-              dark:border-neutral-800
-            "
-          >
-
-            {(
-              [
-                "24H",
-                "7D",
-                "30D",
-              ] as Range[]
-            ).map(
-              (option) => (
-
-                <button
-                  key={
-                    option
-                  }
-
-                  onClick={() =>
-                    setRange(
-                      option
-                    )
-                  }
-
-                  className={`
-                    rounded-md
-                    px-3
-                    py-1.5
-                    text-xs
-                    font-medium
-                    transition-colors
-
-                    ${
-                      range ===
-                      option
-
-                        ? `
-                          bg-neutral-900
-                          text-white
-
-                          dark:bg-neutral-100
-                          dark:text-neutral-900
-                        `
-
-                        : `
-                          text-neutral-500
-                          hover:text-neutral-900
-
-                          dark:text-neutral-400
-                          dark:hover:text-neutral-100
-                        `
-                    }
-                  `}
-                >
-                  {option}
-                </button>
-
-              )
-            )}
-
-          </div>
-
-
-          <p
-            className="
-              text-xs
-              text-neutral-400
-            "
-          >
-            Texas time ·{" "}
-            {selectedRange}
-          </p>
-
-        </div>
-
-
-        {/* METRICS */}
+        {/* SUMMARY */}
 
         {summary && (
 
-          <section
-            className="
-              grid
-              gap-3
+          <section>
 
-              sm:grid-cols-2
-              lg:grid-cols-4
-            "
-          >
-
-            <MetricCard
-              label="Average Demand"
-
-              value={
-                Math.round(
-                  summary.averageDemand
-                ).toLocaleString()
-              }
-
-              description={
-                selectedRange
-              }
-            />
+            <p
+              className="
+                mb-3
+                text-xs
+                text-neutral-400
+              "
+            >
+              Latest 30 days
+            </p>
 
 
-            <MetricCard
-              label="Peak Demand"
+            <div
+              className="
+                grid
+                gap-3
 
-              value={
-                summary.peakDemand.toLocaleString()
-              }
+                sm:grid-cols-2
+                lg:grid-cols-4
+              "
+            >
 
-              description={
-                `${
-                  formatTexasDate(
-                    summary.peakTimestamp
-                  )
-                } · ${
-                  formatTexasTime(
-                    summary.peakTimestamp
-                  )
-                }`
-              }
-            />
+              <MetricCard
+                label="Average Demand"
 
+                value={
+                  Math.round(
+                    summary.averageDemand
+                  ).toLocaleString()
+                }
 
-            <MetricCard
-              label="Lowest Demand"
-
-              value={
-                summary.minimumDemand.toLocaleString()
-              }
-
-              description={
-                `${
-                  formatTexasDate(
-                    summary.minimumTimestamp
-                  )
-                } · ${
-                  formatTexasTime(
-                    summary.minimumTimestamp
-                  )
-                }`
-              }
-            />
+                description="Latest 30 days"
+              />
 
 
-            <MetricCard
-              label="Observations"
+              <MetricCard
+                label="Peak Demand"
 
-              value={
-                summary.observations.toLocaleString()
-              }
+                value={
+                  summary.peakDemand.toLocaleString()
+                }
 
-              description="Hourly records"
-            />
+                description={
+                  `${
+                    formatTexasDate(
+                      summary.peakTimestamp
+                    )
+                  } · ${
+                    formatTexasTime(
+                      summary.peakTimestamp
+                    )
+                  }`
+                }
+              />
+
+
+              <MetricCard
+                label="Lowest Demand"
+
+                value={
+                  summary.minimumDemand.toLocaleString()
+                }
+
+                description={
+                  `${
+                    formatTexasDate(
+                      summary.minimumTimestamp
+                    )
+                  } · ${
+                    formatTexasTime(
+                      summary.minimumTimestamp
+                    )
+                  }`
+                }
+              />
+
+
+              <MetricCard
+                label="Observations"
+
+                value={
+                  summary.observations.toLocaleString()
+                }
+
+                description="Hourly records"
+              />
+
+            </div>
 
           </section>
 
         )}
 
 
-        {/* AVERAGE BY HOUR */}
+        {/* 24 HOUR CHART */}
 
         <ChartCard
-          title="Average Demand by Hour"
+          title="Demand — Last 24 Hours"
 
           description={
-            `Texas local hour · ${selectedRange}`
+            `Hourly ERCOT demand · ${formatTexasRange(
+              last24Rows
+            )}`
           }
         >
 
@@ -1080,8 +1031,15 @@ export default function DemandPatterns() {
 
             <LineChart
               data={
-                demandByHour
+                last24Data
               }
+
+              margin={{
+                top: 10,
+                right: 10,
+                left: 0,
+                bottom: 0,
+              }}
             >
 
               <CartesianGrid
@@ -1093,10 +1051,10 @@ export default function DemandPatterns() {
 
 
               <XAxis
-                dataKey="hour"
+                dataKey="label"
 
                 minTickGap={
-                  20
+                  30
                 }
 
                 axisLine={
@@ -1111,8 +1069,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
               />
 
@@ -1134,8 +1091,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
 
                 tickFormatter={(
@@ -1151,7 +1107,9 @@ export default function DemandPatterns() {
 
               <Tooltip
                 content={
-                  <DemandTooltip />
+                  <DemandTooltip
+                    metricLabel="Demand"
+                  />
                 }
               />
 
@@ -1164,14 +1122,16 @@ export default function DemandPatterns() {
                 stroke="var(--chart-actual)"
 
                 strokeWidth={
-                  2
+                  2.25
                 }
 
                 dot={
                   false
                 }
 
-                connectNulls
+                activeDot={{
+                  r: 4,
+                }}
               />
 
             </LineChart>
@@ -1181,13 +1141,27 @@ export default function DemandPatterns() {
         </ChartCard>
 
 
-        {/* DAILY AVERAGE */}
+        {/* DAILY CHART */}
 
         <ChartCard
           title="Daily Average Demand"
 
           description={
-            `Each bar is a Texas calendar day · ${selectedRange}`
+            `Average daily ERCOT demand · ${formatTexasRange(
+              dailyRows
+            )}`
+          }
+
+          filter={
+            <DailyRangeFilter
+              range={
+                dailyRange
+              }
+
+              setRange={
+                setDailyRange
+              }
+            />
           }
         >
 
@@ -1196,11 +1170,50 @@ export default function DemandPatterns() {
             height="100%"
           >
 
-            <BarChart
+            <AreaChart
               data={
-                demandByDay
+                dailyData
               }
+
+              margin={{
+                top: 12,
+                right: 12,
+                left: 0,
+                bottom: 0,
+              }}
             >
+
+              <defs>
+
+                <linearGradient
+                  id="dailyDemandFill"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+
+                  <stop
+                    offset="0%"
+                    stopColor="var(--chart-actual)"
+                    stopOpacity={
+                      0.22
+                    }
+                  />
+
+
+                  <stop
+                    offset="100%"
+                    stopColor="var(--chart-actual)"
+                    stopOpacity={
+                      0
+                    }
+                  />
+
+                </linearGradient>
+
+              </defs>
+
 
               <CartesianGrid
                 stroke="var(--border)"
@@ -1214,7 +1227,7 @@ export default function DemandPatterns() {
                 dataKey="label"
 
                 minTickGap={
-                  15
+                  25
                 }
 
                 axisLine={
@@ -1229,8 +1242,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
               />
 
@@ -1252,8 +1264,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
 
                 tickFormatter={(
@@ -1269,38 +1280,69 @@ export default function DemandPatterns() {
 
               <Tooltip
                 content={
-                  <DemandTooltip />
+                  <DemandTooltip
+                    metricLabel="Daily average"
+                  />
                 }
               />
 
 
-              <Bar
+              <Area
+                type="monotone"
+
                 dataKey="demand"
 
-                fill="var(--chart-actual)"
+                stroke="var(--chart-actual)"
 
-                radius={[
-                  4,
-                  4,
-                  0,
-                  0,
-                ]}
+                strokeWidth={
+                  2.25
+                }
+
+                fill="url(#dailyDemandFill)"
+
+                dot={{
+                  r: 2.5,
+                  fill:
+                    "var(--card)",
+                  stroke:
+                    "var(--chart-actual)",
+                  strokeWidth:
+                    1.5,
+                }}
+
+                activeDot={{
+                  r: 5,
+                }}
               />
 
-            </BarChart>
+            </AreaChart>
 
           </ResponsiveContainer>
 
         </ChartCard>
 
 
-        {/* MONTHLY AVERAGE */}
+        {/* MONTHLY CHART */}
 
         <ChartCard
           title="Average Demand by Month"
 
           description={
-            `Texas calendar month and year · ${selectedRange}`
+            `Monthly average ERCOT demand · ${formatTexasRange(
+              monthlyRows
+            )}`
+          }
+
+          filter={
+            <MonthlyRangeFilter
+              range={
+                monthlyRange
+              }
+
+              setRange={
+                setMonthlyRange
+              }
+            />
           }
         >
 
@@ -1311,8 +1353,17 @@ export default function DemandPatterns() {
 
             <BarChart
               data={
-                demandByMonth
+                monthlyData
               }
+
+              barCategoryGap="24%"
+
+              margin={{
+                top: 15,
+                right: 12,
+                left: 0,
+                bottom: 0,
+              }}
             >
 
               <CartesianGrid
@@ -1338,8 +1389,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
               />
 
@@ -1361,8 +1411,7 @@ export default function DemandPatterns() {
                   fill:
                     "var(--muted)",
 
-                  fontSize:
-                    11,
+                  fontSize: 11,
                 }}
 
                 tickFormatter={(
@@ -1377,8 +1426,18 @@ export default function DemandPatterns() {
 
 
               <Tooltip
+                cursor={{
+                  fill:
+                    "var(--border)",
+
+                  opacity:
+                    0.25,
+                }}
+
                 content={
-                  <DemandTooltip />
+                  <DemandTooltip
+                    metricLabel="Monthly average"
+                  />
                 }
               />
 
@@ -1388,11 +1447,15 @@ export default function DemandPatterns() {
 
                 fill="var(--chart-actual)"
 
+                maxBarSize={
+                  70
+                }
+
                 radius={[
-                  4,
-                  4,
-                  0,
-                  0,
+                  6,
+                  6,
+                  2,
+                  2,
                 ]}
               />
 
@@ -1403,7 +1466,7 @@ export default function DemandPatterns() {
         </ChartCard>
 
 
-        {/* HIGHEST DEMAND HOURS */}
+        {/* PEAK HOURS */}
 
         <section
           className="
@@ -1425,8 +1488,7 @@ export default function DemandPatterns() {
               font-medium
             "
           >
-            Highest Demand
-            Hours
+            Highest Demand Hours
           </h2>
 
 
@@ -1437,9 +1499,8 @@ export default function DemandPatterns() {
               text-neutral-500
             "
           >
-            Top hourly
-            observations within{" "}
-            {selectedRange} ·
+            Top hourly observations
+            from the latest 30 days ·
             Texas local time
           </p>
 
@@ -1468,35 +1529,17 @@ export default function DemandPatterns() {
 
                 <tr>
 
-                  <th
-                    className="
-                      pb-3
-                      font-medium
-                    "
-                  >
+                  <th className="pb-3 font-medium">
                     Rank
                   </th>
 
-
-                  <th
-                    className="
-                      pb-3
-                      font-medium
-                    "
-                  >
+                  <th className="pb-3 font-medium">
                     Date
                   </th>
 
-
-                  <th
-                    className="
-                      pb-3
-                      font-medium
-                    "
-                  >
+                  <th className="pb-3 font-medium">
                     Texas Time
                   </th>
-
 
                   <th
                     className="
@@ -1544,11 +1587,7 @@ export default function DemandPatterns() {
                       </td>
 
 
-                      <td
-                        className="
-                          py-3
-                        "
-                      >
+                      <td className="py-3">
                         {
                           formatTexasDate(
                             row.timestamp
@@ -1604,13 +1643,204 @@ export default function DemandPatterns() {
 
 
 /* ========================================================
-   CUSTOM TOOLTIP
+   DAILY FILTER
+   ======================================================== */
+
+function DailyRangeFilter({
+  range,
+  setRange,
+}: {
+  range: DailyRange;
+
+  setRange:
+    (
+      range:
+        DailyRange
+    ) => void;
+}) {
+  return (
+    <FilterShell>
+
+      {(
+        [
+          "7D",
+          "30D",
+        ] as DailyRange[]
+      ).map(
+        (option) => (
+
+          <FilterButton
+            key={
+              option
+            }
+
+            active={
+              range === option
+            }
+
+            onClick={() =>
+              setRange(
+                option
+              )
+            }
+          >
+            {option}
+          </FilterButton>
+
+        )
+      )}
+
+    </FilterShell>
+  );
+}
+
+
+/* ========================================================
+   MONTH FILTER
+   ======================================================== */
+
+function MonthlyRangeFilter({
+  range,
+  setRange,
+}: {
+  range:
+    MonthlyRange;
+
+  setRange:
+    (
+      range:
+        MonthlyRange
+    ) => void;
+}) {
+  return (
+    <FilterShell>
+
+      <FilterButton
+        active={
+          range === "6M"
+        }
+
+        onClick={() =>
+          setRange(
+            "6M"
+          )
+        }
+      >
+        6M
+      </FilterButton>
+
+
+      <FilterButton
+        active={
+          range === "12M"
+        }
+
+        onClick={() =>
+          setRange(
+            "12M"
+          )
+        }
+      >
+        Rolling 12M
+      </FilterButton>
+
+    </FilterShell>
+  );
+}
+
+
+/* ========================================================
+   FILTER COMPONENTS
+   ======================================================== */
+
+function FilterShell({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <div
+      className="
+        flex
+        w-fit
+        rounded-lg
+        border
+        border-neutral-200
+        p-1
+
+        dark:border-neutral-800
+      "
+    >
+      {children}
+    </div>
+  );
+}
+
+
+function FilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+
+  onClick:
+    () => void;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <button
+      onClick={
+        onClick
+      }
+
+      className={`
+        rounded-md
+        px-3
+        py-1.5
+        text-xs
+        font-medium
+        transition-colors
+
+        ${
+          active
+
+            ? `
+              bg-neutral-900
+              text-white
+
+              dark:bg-neutral-100
+              dark:text-neutral-900
+            `
+
+            : `
+              text-neutral-500
+              hover:text-neutral-900
+
+              dark:text-neutral-400
+              dark:hover:text-neutral-100
+            `
+        }
+      `}
+    >
+      {children}
+    </button>
+  );
+}
+
+
+/* ========================================================
+   TOOLTIP
    ======================================================== */
 
 function DemandTooltip({
   active,
   payload,
   label,
+  metricLabel,
 }: {
   active?: boolean;
 
@@ -1621,6 +1851,9 @@ function DemandTooltip({
   }>;
 
   label?: string;
+
+  metricLabel:
+    string;
 }) {
   if (
     !active ||
@@ -1641,7 +1874,7 @@ function DemandTooltip({
   return (
     <div
       className="
-        min-w-[170px]
+        min-w-[180px]
         rounded-lg
         border
         border-neutral-200
@@ -1686,7 +1919,7 @@ function DemandTooltip({
             dark:text-neutral-400
           "
         >
-          Average demand
+          {metricLabel}
         </span>
 
 
@@ -1782,11 +2015,19 @@ function MetricCard({
 function ChartCard({
   title,
   description,
+  filter,
   children,
 }: {
   title: string;
-  description: string;
-  children: ReactNode;
+
+  description:
+    string;
+
+  filter?:
+    ReactNode;
+
+  children:
+    ReactNode;
 }) {
   return (
     <section
@@ -1803,31 +2044,52 @@ function ChartCard({
       "
     >
 
-      <h2
+      <div
         className="
-          text-base
-          font-medium
+          flex
+          flex-col
+          gap-4
+
+          sm:flex-row
+          sm:items-start
+          sm:justify-between
         "
       >
-        {title}
-      </h2>
+
+        <div>
+
+          <h2
+            className="
+              text-base
+              font-medium
+            "
+          >
+            {title}
+          </h2>
 
 
-      <p
-        className="
-          mt-1
-          text-xs
-          text-neutral-500
-        "
-      >
-        {description}
-      </p>
+          <p
+            className="
+              mt-1
+              text-xs
+              text-neutral-500
+            "
+          >
+            {description}
+          </p>
+
+        </div>
+
+
+        {filter}
+
+      </div>
 
 
       <div
         className="
           mt-6
-          h-[320px]
+          h-[330px]
           w-full
         "
       >
