@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ReactNode,
   useEffect,
   useMemo,
   useState,
@@ -47,24 +48,19 @@ type Range =
 function parseNumber(
   value: string
 ) {
-
   if (
-    value.trim() ===
-    ""
+    value.trim() === ""
   ) {
     return null;
   }
 
-  return Number(
-    value
-  );
+  return Number(value);
 }
 
 
 function parseCsv(
   csv: string
 ): DemandRow[] {
-
   const lines =
     csv
       .trim()
@@ -72,66 +68,53 @@ function parseCsv(
 
 
   const headers =
-    lines[
-      0
-    ].split(",");
+    lines[0].split(",");
 
 
   return lines
     .slice(1)
-    .map(
-      (
-        line
-      ) => {
-
-        const values =
-          line.split(
-            ","
-          );
+    .map((line) => {
+      const values =
+        line.split(",");
 
 
-        const row =
-          Object.fromEntries(
-            headers.map(
-              (
-                header,
-                index
-              ) => [
-                header,
-                values[
-                  index
-                ] ?? "",
-              ]
-            )
-          );
+      const row =
+        Object.fromEntries(
+          headers.map(
+            (
+              header,
+              index
+            ) => [
+              header,
+              values[index] ?? "",
+            ]
+          )
+        );
 
 
-        return {
-          timestamp:
-            row.timestamp,
+      return {
+        timestamp:
+          row.timestamp,
 
-          demand:
-            Number(
-              row.demand
-            ),
+        demand:
+          Number(
+            row.demand
+          ),
 
-          forecast:
-            parseNumber(
-              row.forecast
-            ),
-        };
-      }
-    );
+        forecast:
+          parseNumber(
+            row.forecast
+          ),
+      };
+    });
 }
 
 
 function average(
   values: number[]
 ) {
-
   if (
-    values.length ===
-    0
+    values.length === 0
   ) {
     return 0;
   }
@@ -143,8 +126,7 @@ function average(
         sum,
         value
       ) =>
-        sum +
-        value,
+        sum + value,
       0
     ) /
     values.length
@@ -155,7 +137,6 @@ function average(
 function texasParts(
   timestamp: string
 ) {
-
   const parts =
     new Intl.DateTimeFormat(
       "en-US",
@@ -181,27 +162,19 @@ function texasParts(
         hourCycle:
           "h23",
       }
-    )
-    .formatToParts(
-      new Date(
-        timestamp
-      )
+    ).formatToParts(
+      new Date(timestamp)
     );
 
 
   function get(
     type: Intl.DateTimeFormatPartTypes
   ) {
-
     return (
       parts.find(
-        (
-          part
-        ) =>
-          part.type ===
-          type
-      )?.value ??
-      ""
+        (part) =>
+          part.type === type
+      )?.value ?? ""
     );
   }
 
@@ -209,36 +182,26 @@ function texasParts(
   return {
     year:
       Number(
-        get(
-          "year"
-        )
+        get("year")
       ),
 
     month:
       Number(
-        get(
-          "month"
-        )
+        get("month")
       ),
 
     day:
       Number(
-        get(
-          "day"
-        )
+        get("day")
       ),
 
     hour:
       Number(
-        get(
-          "hour"
-        )
+        get("hour")
       ),
 
     weekday:
-      get(
-        "weekday"
-      ),
+      get("weekday"),
   };
 }
 
@@ -246,7 +209,6 @@ function texasParts(
 function formatTexasDate(
   timestamp: string
 ) {
-
   return new Intl.DateTimeFormat(
     "en-US",
     {
@@ -266,9 +228,7 @@ function formatTexasDate(
         "numeric",
     }
   ).format(
-    new Date(
-      timestamp
-    )
+    new Date(timestamp)
   );
 }
 
@@ -276,7 +236,6 @@ function formatTexasDate(
 function formatTexasTime(
   timestamp: string
 ) {
-
   return new Intl.DateTimeFormat(
     "en-US",
     {
@@ -287,9 +246,7 @@ function formatTexasTime(
         "numeric",
     }
   ).format(
-    new Date(
-      timestamp
-    )
+    new Date(timestamp)
   );
 }
 
@@ -297,10 +254,8 @@ function formatTexasTime(
 function formatTexasRange(
   rows: DemandRow[]
 ) {
-
   if (
-    rows.length ===
-    0
+    rows.length === 0
   ) {
     return "";
   }
@@ -325,29 +280,29 @@ function formatTexasRange(
     );
 
 
-  return `${
+  const start =
+    formatter.format(
+      new Date(
+        rows[0].timestamp
+      )
+    );
+
+
+  const end =
     formatter.format(
       new Date(
         rows[
-          0
+          rows.length - 1
         ].timestamp
       )
-    )
-  } – ${
-    formatter.format(
-      new Date(
-        rows[
-          rows.length -
-          1
-        ].timestamp
-      )
-    )
-  }`;
+    );
+
+
+  return `${start} – ${end}`;
 }
 
 
 export default function DemandPatterns() {
-
   const [
     rows,
     setRows,
@@ -361,9 +316,7 @@ export default function DemandPatterns() {
     loading,
     setLoading,
   ] =
-    useState(
-      true
-    );
+    useState(true);
 
 
   const [
@@ -376,13 +329,11 @@ export default function DemandPatterns() {
 
 
   // ======================================================
-  // LOAD
+  // LOAD DATA
   // ======================================================
 
   useEffect(() => {
-
     async function loadData() {
-
       const response =
         await fetch(
           "/ercot_demand_forecast_clean.csv"
@@ -394,30 +345,24 @@ export default function DemandPatterns() {
 
 
       setRows(
-        parseCsv(
-          csv
-        )
+        parseCsv(csv)
       );
 
 
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
 
 
     loadData();
-
   }, []);
 
 
   // ======================================================
-  // FILTER
+  // FILTER RANGE
   // ======================================================
 
   const filteredRows =
     useMemo(() => {
-
       const hours = {
         "24H": 24,
         "7D": 168,
@@ -428,7 +373,6 @@ export default function DemandPatterns() {
       return rows.slice(
         -hours
       );
-
     }, [
       rows,
       range,
@@ -448,12 +392,11 @@ export default function DemandPatterns() {
 
 
   // ======================================================
-  // METRICS
+  // SUMMARY
   // ======================================================
 
   const summary =
     useMemo(() => {
-
       if (
         filteredRows.length ===
         0
@@ -465,9 +408,7 @@ export default function DemandPatterns() {
       const avg =
         average(
           filteredRows.map(
-            (
-              row
-            ) =>
+            (row) =>
               row.demand
           )
         );
@@ -484,9 +425,7 @@ export default function DemandPatterns() {
               ? row
               : highest,
 
-          filteredRows[
-            0
-          ]
+          filteredRows[0]
         );
 
 
@@ -501,9 +440,7 @@ export default function DemandPatterns() {
               ? row
               : lowest,
 
-          filteredRows[
-            0
-          ]
+          filteredRows[0]
         );
 
 
@@ -526,39 +463,32 @@ export default function DemandPatterns() {
         observations:
           filteredRows.length,
       };
-
     }, [
       filteredRows,
     ]);
 
 
   // ======================================================
-  // DEMAND BY TEXAS HOUR
+  // AVERAGE DEMAND BY TEXAS HOUR
   // ======================================================
 
   const demandByHour =
     useMemo(() => {
-
       return Array.from(
         {
-          length:
-            24,
+          length: 24,
         },
 
         (
           _,
           hour
         ) => {
-
           const matching =
             filteredRows.filter(
-              (
-                row
-              ) =>
+              (row) =>
                 texasParts(
                   row.timestamp
-                ).hour ===
-                hour
+                ).hour === hour
             );
 
 
@@ -591,53 +521,41 @@ export default function DemandPatterns() {
             demand:
               matching.length >
               0
-
                 ? Math.round(
                     average(
                       matching.map(
-                        (
-                          row
-                        ) =>
+                        (row) =>
                           row.demand
                       )
                     )
                   )
-
                 : null,
           };
         }
       );
-
     }, [
       filteredRows,
     ]);
 
 
   // ======================================================
-  // DAILY AVERAGES — TEXAS CALENDAR DAY
+  // DAILY AVERAGES
   // ======================================================
 
   const demandByDay =
     useMemo(() => {
-
       const groups =
         new Map<
           string,
           {
-            timestamp:
-              string;
-
-            demands:
-              number[];
+            timestamp: string;
+            demands: number[];
           }
         >();
 
 
       filteredRows.forEach(
-        (
-          row
-        ) => {
-
+        (row) => {
           const parts =
             texasParts(
               row.timestamp
@@ -645,9 +563,7 @@ export default function DemandPatterns() {
 
 
           const key =
-            `${
-              parts.year
-            }-${
+            `${parts.year}-${
               String(
                 parts.month
               ).padStart(
@@ -665,21 +581,16 @@ export default function DemandPatterns() {
 
 
           const existing =
-            groups.get(
-              key
-            );
+            groups.get(key);
 
 
           if (
             existing
           ) {
-
             existing.demands.push(
               row.demand
             );
-
           } else {
-
             groups.set(
               key,
               {
@@ -699,9 +610,7 @@ export default function DemandPatterns() {
       return Array.from(
         groups.values()
       ).map(
-        (
-          group
-        ) => ({
+        (group) => ({
           label:
             new Intl.DateTimeFormat(
               "en-US",
@@ -732,37 +641,29 @@ export default function DemandPatterns() {
             ),
         })
       );
-
     }, [
       filteredRows,
     ]);
 
 
   // ======================================================
-  // MONTHLY AVERAGES — TEXAS CALENDAR MONTH
+  // MONTHLY AVERAGES
   // ======================================================
 
   const demandByMonth =
     useMemo(() => {
-
       const groups =
         new Map<
           string,
           {
-            timestamp:
-              string;
-
-            demands:
-              number[];
+            timestamp: string;
+            demands: number[];
           }
         >();
 
 
       filteredRows.forEach(
-        (
-          row
-        ) => {
-
+        (row) => {
           const parts =
             texasParts(
               row.timestamp
@@ -770,9 +671,7 @@ export default function DemandPatterns() {
 
 
           const key =
-            `${
-              parts.year
-            }-${
+            `${parts.year}-${
               String(
                 parts.month
               ).padStart(
@@ -783,21 +682,16 @@ export default function DemandPatterns() {
 
 
           const existing =
-            groups.get(
-              key
-            );
+            groups.get(key);
 
 
           if (
             existing
           ) {
-
             existing.demands.push(
               row.demand
             );
-
           } else {
-
             groups.set(
               key,
               {
@@ -817,9 +711,7 @@ export default function DemandPatterns() {
       return Array.from(
         groups.values()
       ).map(
-        (
-          group
-        ) => ({
+        (group) => ({
           label:
             new Intl.DateTimeFormat(
               "en-US",
@@ -847,19 +739,17 @@ export default function DemandPatterns() {
             ),
         })
       );
-
     }, [
       filteredRows,
     ]);
 
 
   // ======================================================
-  // TOP PEAK HOURS
+  // PEAK HOURS
   // ======================================================
 
   const peakHours =
     useMemo(() => {
-
       return [
         ...filteredRows,
       ]
@@ -875,7 +765,6 @@ export default function DemandPatterns() {
           0,
           10
         );
-
     }, [
       filteredRows,
     ]);
@@ -884,7 +773,6 @@ export default function DemandPatterns() {
   if (
     loading
   ) {
-
     return (
       <main
         className="
@@ -989,7 +877,7 @@ export default function DemandPatterns() {
         <DashboardNav />
 
 
-        {/* RANGE */}
+        {/* RANGE FILTER */}
 
         <div
           className="
@@ -1024,9 +912,7 @@ export default function DemandPatterns() {
                 "30D",
               ] as Range[]
             ).map(
-              (
-                option
-              ) => (
+              (option) => (
 
                 <button
                   key={
@@ -1099,6 +985,7 @@ export default function DemandPatterns() {
             className="
               grid
               gap-3
+
               sm:grid-cols-2
               lg:grid-cols-4
             "
@@ -1176,7 +1063,7 @@ export default function DemandPatterns() {
         )}
 
 
-        {/* HOURLY */}
+        {/* AVERAGE BY HOUR */}
 
         <ChartCard
           title="Average Demand by Hour"
@@ -1243,6 +1130,14 @@ export default function DemandPatterns() {
                   false
                 }
 
+                tick={{
+                  fill:
+                    "var(--muted)",
+
+                  fontSize:
+                    11,
+                }}
+
                 tickFormatter={(
                   value
                 ) =>
@@ -1255,15 +1150,9 @@ export default function DemandPatterns() {
 
 
               <Tooltip
-                formatter={(
-                  value
-                ) => [
-                  Number(
-                    value
-                  ).toLocaleString(),
-
-                  "Average demand",
-                ]}
+                content={
+                  <DemandTooltip />
+                }
               />
 
 
@@ -1292,7 +1181,7 @@ export default function DemandPatterns() {
         </ChartCard>
 
 
-        {/* DAILY */}
+        {/* DAILY AVERAGE */}
 
         <ChartCard
           title="Daily Average Demand"
@@ -1337,6 +1226,9 @@ export default function DemandPatterns() {
                 }
 
                 tick={{
+                  fill:
+                    "var(--muted)",
+
                   fontSize:
                     11,
                 }}
@@ -1356,6 +1248,14 @@ export default function DemandPatterns() {
                   false
                 }
 
+                tick={{
+                  fill:
+                    "var(--muted)",
+
+                  fontSize:
+                    11,
+                }}
+
                 tickFormatter={(
                   value
                 ) =>
@@ -1368,15 +1268,9 @@ export default function DemandPatterns() {
 
 
               <Tooltip
-                formatter={(
-                  value
-                ) => [
-                  Number(
-                    value
-                  ).toLocaleString(),
-
-                  "Average demand",
-                ]}
+                content={
+                  <DemandTooltip />
+                }
               />
 
 
@@ -1400,7 +1294,7 @@ export default function DemandPatterns() {
         </ChartCard>
 
 
-        {/* MONTH */}
+        {/* MONTHLY AVERAGE */}
 
         <ChartCard
           title="Average Demand by Month"
@@ -1439,6 +1333,14 @@ export default function DemandPatterns() {
                 tickLine={
                   false
                 }
+
+                tick={{
+                  fill:
+                    "var(--muted)",
+
+                  fontSize:
+                    11,
+                }}
               />
 
 
@@ -1455,6 +1357,14 @@ export default function DemandPatterns() {
                   false
                 }
 
+                tick={{
+                  fill:
+                    "var(--muted)",
+
+                  fontSize:
+                    11,
+                }}
+
                 tickFormatter={(
                   value
                 ) =>
@@ -1467,15 +1377,9 @@ export default function DemandPatterns() {
 
 
               <Tooltip
-                formatter={(
-                  value
-                ) => [
-                  Number(
-                    value
-                  ).toLocaleString(),
-
-                  "Average demand",
-                ]}
+                content={
+                  <DemandTooltip />
+                }
               />
 
 
@@ -1499,7 +1403,7 @@ export default function DemandPatterns() {
         </ChartCard>
 
 
-        {/* PEAK TABLE */}
+        {/* HIGHEST DEMAND HOURS */}
 
         <section
           className="
@@ -1636,8 +1540,7 @@ export default function DemandPatterns() {
                           text-neutral-400
                         "
                       >
-                        {index +
-                          1}
+                        {index + 1}
                       </td>
 
 
@@ -1700,6 +1603,118 @@ export default function DemandPatterns() {
 }
 
 
+/* ========================================================
+   CUSTOM TOOLTIP
+   ======================================================== */
+
+function DemandTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+
+  payload?: Array<{
+    value?:
+      | number
+      | string;
+  }>;
+
+  label?: string;
+}) {
+  if (
+    !active ||
+    !payload ||
+    payload.length === 0
+  ) {
+    return null;
+  }
+
+
+  const value =
+    Number(
+      payload[0].value ??
+        0
+    );
+
+
+  return (
+    <div
+      className="
+        min-w-[170px]
+        rounded-lg
+        border
+        border-neutral-200
+        bg-white
+        px-3
+        py-2.5
+        shadow-lg
+
+        dark:border-neutral-700
+        dark:bg-neutral-900
+      "
+    >
+
+      <p
+        className="
+          text-xs
+          font-semibold
+          text-neutral-900
+
+          dark:text-neutral-100
+        "
+      >
+        {label}
+      </p>
+
+
+      <div
+        className="
+          mt-2
+          flex
+          items-center
+          justify-between
+          gap-5
+        "
+      >
+
+        <span
+          className="
+            text-xs
+            text-neutral-500
+
+            dark:text-neutral-400
+          "
+        >
+          Average demand
+        </span>
+
+
+        <span
+          className="
+            text-xs
+            font-semibold
+            text-neutral-900
+
+            dark:text-white
+          "
+        >
+          {
+            value.toLocaleString()
+          }
+        </span>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+/* ========================================================
+   METRIC CARD
+   ======================================================== */
+
 function MetricCard({
   label,
   value,
@@ -1709,7 +1724,6 @@ function MetricCard({
   value: string;
   description: string;
 }) {
-
   return (
     <div
       className="
@@ -1761,6 +1775,10 @@ function MetricCard({
 }
 
 
+/* ========================================================
+   CHART CARD
+   ======================================================== */
+
 function ChartCard({
   title,
   description,
@@ -1768,10 +1786,8 @@ function ChartCard({
 }: {
   title: string;
   description: string;
-  children:
-    React.ReactNode;
+  children: ReactNode;
 }) {
-
   return (
     <section
       className="
